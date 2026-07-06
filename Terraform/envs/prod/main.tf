@@ -15,7 +15,7 @@ provider "aws" {
 
 
 module "network" {
-  source = "../.../modules/network"
+  source = "../../modules/network"
   
   environment = var.environment
   vpc_cidr   = var.vpc_cidr
@@ -99,7 +99,7 @@ resource "aws_lb_listener" "http" {
   port              = "80"
   protocol          = "HTTP"
   
-  # PROD: Redirect HTTP to HTTPS
+  
   default_action {
     type = "redirect"
     
@@ -127,7 +127,7 @@ resource "aws_lb_listener" "https" {
 
 
 module "rds" {
-  source = "../.../modules/rds"
+  source = "../../modules/rds"
   
   environment = var.environment
   vpc_id     = module.network.vpc_id
@@ -143,7 +143,7 @@ module "rds" {
   username    = var.rds_username
   password    = var.rds_password
   
-  # PROD: Longer backup retention
+  
   backup_retention_period = var.rds_backup_retention
   skip_final_snapshot    = var.rds_skip_final_snapshot
   deletion_protection    = var.rds_deletion_protection
@@ -154,7 +154,7 @@ module "rds" {
 
 
 module "ecs" {
-  source = "../.../modules/ecs"
+  source = "../../modules/ecs"
   
   environment = var.environment
   vpc_id     = module.network.vpc_id
@@ -184,7 +184,7 @@ module "ecs" {
 }
 
 
-# CloudWatch Alarms for PROD
+
 resource "aws_cloudwatch_metric_alarm" "rds_cpu" {
   alarm_name          = "${var.environment}-rds-cpu-alarm"
   comparison_operator = "GreaterThanThreshold"
