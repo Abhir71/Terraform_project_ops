@@ -37,9 +37,7 @@ jobs:
           terraform_version: ${{ env.TF_VERSION }}
           terraform_wrapper: true
 
-      # NOTE: this repeats fmt for both matrix legs, which is harmless
-      # (fmt is env-independent) but if you want it to run once, move it
-      # to its own job with no matrix and add "needs:" below.
+     
       - name: Terraform fmt (check only)
         id: fmt
         run: terraform fmt -check -recursive -diff
@@ -48,8 +46,6 @@ jobs:
       - name: Terraform init
         id: init
         run: terraform init -backend=true -input=false
-        # Each env has its own backend.tf, so no -backend-config flags needed here.
-        # If you later move backend settings into secrets, add -backend-config="key=value" flags.
 
       - name: Terraform validate
         id: validate
