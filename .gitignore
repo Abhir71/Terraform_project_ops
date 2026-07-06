@@ -1,0 +1,23 @@
+
+# Terraform
+**/.terraform/
+*.tfstate
+*.tfstate.*
+terraform.tfstate
+terraform.tfvars
+*.plan
+
+# Backups
+backups/
+*.sql
+*.dump
+
+# Docker
+docker-compose.override.yml
+.docker/
+.dockerignore
+
+# Environment
+.env
+.env.local
+.env.*.local

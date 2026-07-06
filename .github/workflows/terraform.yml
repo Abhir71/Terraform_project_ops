@@ -1,0 +1,160 @@
+name: Terraform Plan
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "terraform/**"
+      - ".github/workflows/terraform.yml"
+
+permissions:
+  contents: read
+  pull-requests: write
+
+env:
+  TF_VERSION: "1.9.5"
+
+jobs:
+  terraform:
+    name: Terraform Plan (${{ matrix.env }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        env: [dev, prod]
+
+    defaults:
+      run:
+        working-directory: terraform/envs/${{ matrix.env }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+          terraform_wrapper: true
+
+      # NOTE: this repeats fmt for both matrix legs, which is harmless
+      # (fmt is env-independent) but if you want it to run once, move it
+      # to its own job with no matrix and add "needs:" below.
+      - name: Terraform fmt (check only)
+        id: fmt
+        run: terraform fmt -check -recursive -diff
+        continue-on-error: true
+
+      - name: Terraform init
+        id: init
+        run: terraform init -backend=true -input=false
+        # Each env has its own backend.tf, so no -backend-config flags needed here.
+        # If you later move backend settings into secrets, add -backend-config="key=value" flags.
+
+      - name: Terraform validate
+        id: validate
+        run: terraform validate -no-color
+
+      - name: Terraform plan
+        id: plan
+        run: |
+          terraform plan -no-color -input=false -refresh=false \
+            -var-file="terraform.tfvars" \
+            -out=tfplan.binary
+        continue-on-error: true
+
+      - name: Terraform show (human-readable plan)
+        id: show
+        if: steps.plan.outcome == 'success' || steps.plan.outcome == 'failure'
+        run: terraform show -no-color tfplan.binary > plan_output.txt || true
+
+      - name: Upload plan as workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: terraform-plan-${{ matrix.env }}
+          path: terraform/envs/${{ matrix.env }}/plan_output.txt
+          retention-days: 14
+
+      - name: Truncate plan for PR comment
+        id: truncate
+        run: |
+          # GitHub PR comments have a ~65536 char limit; keep this well under it.
+          MAX_CHARS=60000
+          if [ -f plan_output.txt ]; then
+            head -c $MAX_CHARS plan_output.txt > plan_output_trimmed.txt
+            if [ $(wc -c < plan_output.txt) -gt $MAX_CHARS ]; then
+              echo "" >> plan_output_trimmed.txt
+              echo "... (truncated, see workflow artifact for full plan)" >> plan_output_trimmed.txt
+            fi
+          else
+            echo "No plan output produced (init/validate likely failed)." > plan_output_trimmed.txt
+          fi
+
+      - name: Comment plan on PR
+        uses: actions/github-script@v7
+        env:
+          ENV_NAME: ${{ matrix.env }}
+          FMT_OUTCOME: ${{ steps.fmt.outcome }}
+          INIT_OUTCOME: ${{ steps.init.outcome }}
+          VALIDATE_OUTCOME: ${{ steps.validate.outcome }}
+          PLAN_OUTCOME: ${{ steps.plan.outcome }}
+        with:
+          script: |
+            const fs = require('fs');
+            const path = `terraform/envs/${process.env.ENV_NAME}/plan_output_trimmed.txt`;
+            let planText = 'No plan output available.';
+            try {
+              planText = fs.readFileSync(path, 'utf8');
+            } catch (e) {
+              // leave default message
+            }
+
+            const body = [
+              `### Terraform Plan — \`${process.env.ENV_NAME}\``,
+              '',
+              `| Step | Outcome |`,
+              `|------|---------|`,
+              `| fmt | ${process.env.FMT_OUTCOME} |`,
+              `| init | ${process.env.INIT_OUTCOME} |`,
+              `| validate | ${process.env.VALIDATE_OUTCOME} |`,
+              `| plan | ${process.env.PLAN_OUTCOME} |`,
+              '',
+              '<details><summary>Show plan output</summary>',
+              '',
+              '```',
+              planText,
+              '```',
+              '',
+              '</details>'
+            ].join('\n');
+
+            const marker = `<!-- terraform-plan-${process.env.ENV_NAME} -->`;
+            const bodyWithMarker = `${marker}\n${body}`;
+
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+            });
+
+            const existing = comments.find(c => c.body && c.body.includes(marker));
+
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existing.id,
+                body: bodyWithMarker,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body: bodyWithMarker,
+              });
+            }
+
+      - name: Fail job if validate/plan failed
+        if: steps.validate.outcome == 'failure' || steps.plan.outcome == 'failure'
+        run: exit 1
