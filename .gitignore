@@ -7,7 +7,7 @@ terraform.tfstate
 
 *.plan
 
-
+# Backups
 backups/
 *.sql
 *.dump
