@@ -35,9 +35,7 @@ variable "availability_zones" {
   default     = ["us-east-1a", "us-east-1b"]
 }
 
-# ============================================
-# ECS Variables - PROD (More resources)
-# ============================================
+
 variable "container_image" {
   description = "Container image"
   type        = string
