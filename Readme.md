@@ -1,4 +1,7 @@
-Repo layout
+
+![alt text](Aws_arch.png)
+
+#Repo layout
 
 devops-assessment/
 ├── terraform/
