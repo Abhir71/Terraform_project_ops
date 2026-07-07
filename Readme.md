@@ -44,4 +44,4 @@ Known simplifications
 db_master_password is a plain Terraform variable for plan-only review;
 production should pull it from Secrets Manager / SSM.
 ECS task uses a placeholder image (nginx:latest) instead of a built/pushed app image.
-terraform.tfvars files are committed here for reviewer convenience only.
+terraform.tfvars files are committed here for reviewer convenience only
